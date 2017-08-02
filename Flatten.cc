@@ -58,7 +58,7 @@ int main(int argc, char** argv)
 
         QPDFObjectHandle str_obj = pdf.getObjectByID(50,0);
         PointerHolder<Buffer> b = str_obj.getStreamData();
-
+        std::cout << b.getPointer()->getBuffer();
         std::vector<QPDFObjectHandle> all_pages = pdf.getAllPages();
         
         //Process flattening on every page
