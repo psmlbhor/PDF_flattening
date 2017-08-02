@@ -1,4 +1,6 @@
 #include <qpdf/QPDF.hh>
+#include <qpdf/PointerHolder.hh>
+#include <qpdf/Buffer.hh>
 
 #include <iostream>
 #include <cstdlib>
@@ -37,6 +39,7 @@ int main(int argc, char** argv)
     if(acroformPresent(pdf))
     {
         //Get the object ID of those present in /Fields[] 
+        /*
         QPDFObjectHandle root = pdf.getRoot();
         QPDFObjectHandle acroform_dict = root.getKey("/AcroForm");
         QPDFObjectHandle acroform_fields = acroform_dict.getKey("/Fields");
@@ -45,11 +48,27 @@ int main(int argc, char** argv)
         {
             QPDFObjectHandle temp = acroform_fields.getArrayItem(i);
             objectID[i] = temp.getObjectID();
-            std::cerr << objectID[i] << std::endl;
+            //std::cerr << objectID[i] << std::endl;
+        }
+        
+        //Get the default resources for the AcroForm
+        QPDFObjectHandle default_resources_dict = acroform_dict.getKey("/DR"); 
+        QPDFObjectHandle default_resources_obj = pdf.getObjectByID(default_resources_dict.getObjectID(), default_resources_dict.getGeneration());
+        */
+
+        QPDFObjectHandle str_obj = pdf.getObjectByID(50,0);
+        PointerHolder<Buffer> b = str_obj.getStreamData();
+
+        std::vector<QPDFObjectHandle> all_pages = pdf.getAllPages();
+        
+        //Process flattening on every page
+        std::vector<QPDFObjectHandle>::iterator it;
+        for(it = all_pages.begin() ; it < all_pages.end() ; ++it)
+        {
+            
         }
 
-        //std::cerr << "arcroform_dict: " << acroform_dict.getName();
-            
+
     }    
     return 0;   
 }
