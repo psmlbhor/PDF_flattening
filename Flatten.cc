@@ -119,7 +119,8 @@ int main(int argc, char** argv)
                 //Honour the flags(/F) present in the annotation
                 else if (annotationAllowed(flags))
                 {
-                    //create new content stream
+                    //
+                    std::cout << page.getKey("/Contents").getStreamData().getPointer()->getBuffer() << std::endl;
                     //get normal appearance of widget
                     //save graphics state
                     //Apply transformations
