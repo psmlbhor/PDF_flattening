@@ -4,7 +4,30 @@
 
 #include <iostream>
 #include <cstdlib>
+#include <sstream>
 
+//Function to check if the annotation is allowed to be printed
+bool annotationAllowed(unsigned int flags)
+{
+    bool value = true;
+    int bit = 0x01;   
+    
+    //check if annotation is invisible
+    if(flags & bit)
+        value = false;
+
+    //check if annotation is hidden
+    else if(flags & (bit<<1))
+        value = false;
+
+    //check if allowed to print
+    else if(!(flags & (bit<<2)))
+        value = false;
+
+    return value;
+}   
+
+//Check whether the document consists of AcroForm
 bool acroformPresent(QPDF &pdf)
 {
     QPDFObjectHandle root = pdf.getRoot();
@@ -54,7 +77,7 @@ int main(int argc, char** argv)
         //Get the default resources for the AcroForm
         QPDFObjectHandle default_resources_dict = acroform_dict.getKey("/DR"); 
         QPDFObjectHandle default_resources_obj = pdf.getObjectByID(default_resources_dict.getObjectID(), default_resources_dict.getGeneration());
-        */
+        
 
         QPDFObjectHandle str_obj = pdf.getObjectByID(50,0);
         PointerHolder<Buffer> b = str_obj.getStreamData();
@@ -67,8 +90,45 @@ int main(int argc, char** argv)
         {
             
         }
+        */
+        
+        //Get all the pages present in the PDF document
+        std::vector<QPDFObjectHandle> all_pages = pdf.getAllPages();
+        for(std::vector<QPDFObjectHandle>::iterator page_iter = all_pages.begin();
+            page_iter < all_pages.end(); ++page_iter)
+        {
+            QPDFObjectHandle page = *page_iter;
+            std::vector<QPDFObjectHandle> preserved_annots;
 
-
+            //Get all the annotations present in the page
+            std::vector<QPDFObjectHandle> annotations = page.getKey("/Annots").getArrayAsVector();
+            
+            //Work on every annotation present in the page
+            for(std::vector<QPDFObjectHandle>::iterator annot_iter = annotations.begin(); 
+                annot_iter < annotations.end(); ++annot_iter)
+            {
+                QPDFObjectHandle annot = *annot_iter;
+                std::stringstream s(annot.getKey("/F").unparse());
+                unsigned int flags = 0;
+                s >> flags;
+                //preserve non-widget type annotations
+                if(annot.getKey("/Subtype").unparse() != "/Widget")
+                {
+                    preserved_annots.push_back(annot);    
+                }
+                //Honour the flags(/F) present in the annotation
+                else if (annotationAllowed(flags))
+                {
+                    //create new content stream
+                    //get normal appearance of widget
+                    //save graphics state
+                    //Apply transformations
+                    //Insert XObject of /N
+                    //Restore the graphics state 
+                }
+            } 
+        }
+        //add preserved annotations to the page
     }    
     return 0;   
 }
