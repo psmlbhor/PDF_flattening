@@ -1,10 +1,12 @@
 #include <qpdf/QPDF.hh>
 #include <qpdf/PointerHolder.hh>
 #include <qpdf/Buffer.hh>
+#include <qpdf/QPDFWriter.hh>
 
 #include <iostream>
 #include <cstdlib>
 #include <sstream>
+#include <cstring>
 
 //Function to check if the annotation is allowed to be printed
 bool annotationAllowed(unsigned int flags)
@@ -61,37 +63,7 @@ int main(int argc, char** argv)
     //then process further
     if(acroformPresent(pdf))
     {
-        //Get the object ID of those present in /Fields[] 
-        /*
-        QPDFObjectHandle root = pdf.getRoot();
-        QPDFObjectHandle acroform_dict = root.getKey("/AcroForm");
-        QPDFObjectHandle acroform_fields = acroform_dict.getKey("/Fields");
-        int objectID[acroform_fields.getArrayNItems()];
-        for(int i=0; i<acroform_fields.getArrayNItems(); ++i)
-        {
-            QPDFObjectHandle temp = acroform_fields.getArrayItem(i);
-            objectID[i] = temp.getObjectID();
-            //std::cerr << objectID[i] << std::endl;
-        }
-        
-        //Get the default resources for the AcroForm
-        QPDFObjectHandle default_resources_dict = acroform_dict.getKey("/DR"); 
-        QPDFObjectHandle default_resources_obj = pdf.getObjectByID(default_resources_dict.getObjectID(), default_resources_dict.getGeneration());
-        
 
-        QPDFObjectHandle str_obj = pdf.getObjectByID(50,0);
-        PointerHolder<Buffer> b = str_obj.getStreamData();
-        std::cout << b.getPointer()->getBuffer();
-        std::vector<QPDFObjectHandle> all_pages = pdf.getAllPages();
-        
-        //Process flattening on every page
-        std::vector<QPDFObjectHandle>::iterator it;
-        for(it = all_pages.begin() ; it < all_pages.end() ; ++it)
-        {
-            
-        }
-        */
-        
         //Get all the pages present in the PDF document
         std::vector<QPDFObjectHandle> all_pages = pdf.getAllPages();
         for(std::vector<QPDFObjectHandle>::iterator page_iter = all_pages.begin();
@@ -99,6 +71,19 @@ int main(int argc, char** argv)
         {
             QPDFObjectHandle page = *page_iter;
             std::vector<QPDFObjectHandle> preserved_annots;
+            
+            /*
+            unsigned char* page_stream = page.getKey("/Contents").getStreamData().getPointer()->getBuffer();
+            std::string content_stream;
+            if(page_stream)
+            {
+                content_stream(reinterpret_cast<char*>(page_stream));
+            }
+            */
+
+            //Create new content stream for the page
+            QPDFObjectHandle page_stream;
+            std::string page_stream_contents = "q\n";
 
             //Get all the annotations present in the page
             std::vector<QPDFObjectHandle> annotations = page.getKey("/Annots").getArrayAsVector();
@@ -111,24 +96,54 @@ int main(int argc, char** argv)
                 std::stringstream s(annot.getKey("/F").unparse());
                 unsigned int flags = 0;
                 s >> flags;
+                
                 //preserve non-widget type annotations
                 if(annot.getKey("/Subtype").unparse() != "/Widget")
                 {
                     preserved_annots.push_back(annot);    
                 }
+
                 //Honour the flags(/F) present in the annotation
                 else if (annotationAllowed(flags))
                 {
                     //
-                    std::cout << page.getKey("/Contents").getStreamData().getPointer()->getBuffer() << std::endl;
-                    //get normal appearance of widget
-                    //save graphics state
+                    //std::cout << page.getKey("/Contents").getStreamData().getPointer()->getBuffer() << std::endl;
+
+                    //Get the normal appearnce of the widget
+                    QPDFObjectHandle normal_appearence = annot.getKey("/AP").getKey("/N"); 
+                    
+                    //Get the rectangle position of the widget
+                    QPDFObjectHandle rectangle_position = annot.getKey("/Rect");
+                    std::vector<double> widget_rectangle;
+                    for(int i=0; i<4; ++i)
+                    {
+                        widget_rectangle.push_back(rectangle_position.getArrayItem(i).getNumericValue());
+                        std::ostringstream temp;
+                        temp << widget_rectangle[i];
+                        page_stream_contents.append(temp.str()+" ");
+                    }
+                    page_stream_contents.append("re B*\n");
+                    std::cout<<page_stream_contents<<std::endl;
+                    
+                    
                     //Apply transformations
                     //Insert XObject of /N
                     //Restore the graphics state 
                 }
             } 
+            //restore graphics state
+            page_stream_contents.append("Q\n");
+            QPDFObjectHandle content = QPDFObjectHandle::newStream(&pdf, page_stream_contents);
+            page.addPageContents(content, false);
         }
+        
+        //remove the AcroForm from the PDF
+        pdf.getRoot().removeKey("/AcroForm");
+
+        //write the changes to the PDF
+        QPDFWriter w(pdf, "output.pdf");
+        w.write();
+
         //add preserved annotations to the page
     }    
     return 0;   
