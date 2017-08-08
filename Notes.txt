@@ -1,0 +1,6 @@
+In Flatten.cc
+On line 135,
+the stream object wrong operation error occurs because
+the /N of that object is a dictionary containing /On /Off values.
+A condition has to be given there to sort that out.
+
