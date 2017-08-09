@@ -72,20 +72,10 @@ int main(int argc, char** argv)
             QPDFObjectHandle page = *page_iter;
             std::vector<QPDFObjectHandle> preserved_annots;
             
-            /*
-            unsigned char* page_stream = page.getKey("/Contents").getStreamData().getPointer()->getBuffer();
-            std::string content_stream;
-            if(page_stream)
-            {
-                content_stream(reinterpret_cast<char*>(page_stream));
-            }
-            */
-            
             //count the XObjects
             int count = 0;
 
             //Create new content stream for the page
-            QPDFObjectHandle page_stream;
             std::string page_stream_contents = "q\n";
 
             //Get all the annotations present in the page
@@ -93,7 +83,7 @@ int main(int argc, char** argv)
             
             //get the page resources;
             std::map<std::string, QPDFObjectHandle> page_resources_xobject = page.getKey("/Resources").getKey("/XObject").getDictAsMap();
-
+            
             //Work on every annotation present in the page
             for(std::vector<QPDFObjectHandle>::iterator annot_iter = annotations.begin(); 
                 annot_iter < annotations.end(); ++annot_iter)
@@ -109,33 +99,19 @@ int main(int argc, char** argv)
                 }
 
                 //Honour the flags(/F) present in the annotation
-                else if (annotationAllowed(flags)&&(std::cout<<"Maybe this one"<<std::endl))
+                else if (annotationAllowed(flags))
                 {
-                    //
-                    //std::cout << page.getKey("/Contents").getStreamData().getPointer()->getBuffer() << std::endl;
-
-                    //Get the normal appearnce of the widget
-                    //QPDFObjectHandle normal_appearence = annot.getKey("/AP").getKey("/N"); 
                     
-                    //Get the rectangle position of the widget
-                    /*
-                    QPDFObjectHandle rectangle_position = annot.getKey("/Rect");
-                    std::vector<double> widget_rectangle;
-                    for(int i=0; i<4; ++i)
+                    QPDFObjectHandle normal_appearence = annot.getKey("/AP").getKey("/N");
+                    
+                    //button might have /On or /Off states
+                    if(annot.getKey("/FT").unparse()=="/Btn")
                     {
-                        widget_rectangle.push_back(rectangle_position.getArrayItem(i).getNumericValue());
-                        std::ostringstream temp;
-                        temp << widget_rectangle[i];
-                        page_stream_contents.append(temp.str()+" ");
+                        normal_appearence = normal_appearence.getKey("/Yes");
                     }
-                    page_stream_contents.append("re B*\n");
-                    std::cout<<page_stream_contents<<std::endl;
-                    */
                     
-                    QPDFObjectHandle normal_appearence = annot.getKey("/AP").getKey("/N").getDict();
-                    std::cout<<"The problem is above"<<std::endl;
-                    // add name to the XObject of /N
-                    if((std::cout<<"FIRST"<<std::endl) && !normal_appearence.hasKey("/Name"))
+                    //check if /XObject has /Name or not
+                    if(!normal_appearence.getDict().hasKey("/Name"))
                     {
                         std::ostringstream xobj_count;
                         xobj_count << ++count;
@@ -143,20 +119,14 @@ int main(int argc, char** argv)
                         xobj_name.append(xobj_count.str());
 
                         QPDFObjectHandle name = QPDFObjectHandle::parse(xobj_name);
-                        std::cout<<"HERE"<<std::endl;
-                        normal_appearence.replaceKey("/Name", name);
-                        std::cout<<"THERE"<<std::endl;
+                        normal_appearence.getDict().replaceKey("/Name", name);
                         page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name+" Do Q\nq");
                         
                         page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name, normal_appearence));
-                        std::cout<<"I think this one"<<std::endl;
                     }
                     else
                     {
-                        std::cout<<"NEWHERE"<<std::endl;
-                        std::cout.flush();
-                    //add the XObject to the page's resources
-                        QPDFObjectHandle xobj_name = normal_appearence.getKey("/Name");
+                        QPDFObjectHandle xobj_name = normal_appearence.getDict().getKey("/Name");
                         page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name.unparse()+" Do Q\nq");
 
                         page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name.unparse(), normal_appearence));
@@ -165,21 +135,30 @@ int main(int argc, char** argv)
 
                     //Apply transformations
                     //Insert XObject of /N
-                    //Restore the graphics state 
+                    //Restore the graphics state
+                    //
+                    
+                    //remove this annotation from the /Annots of the page
                 }
-            } 
-            std::cout<<"Performaing final rights"<<std::endl;
+
+            }
+            //replace the orginal resources with the new one
+            QPDFObjectHandle new_resources = pdf.makeIndirectObject(QPDFObjectHandle::newDictionary(page_resources_xobject));
+            for(std::map<std::string, QPDFObjectHandle>::iterator it = page_resources_xobject.begin();
+                it != page_resources_xobject.end(); ++it)
+            {
+                page.getKey("/Resources").getKey("/XObject").replaceKey(it->first, it->second);
+            }
+
             page_stream_contents.append("Q\n");
             QPDFObjectHandle content = QPDFObjectHandle::newStream(&pdf, page_stream_contents);
             page.addPageContents(content, false);
-            std::cout<<"Final rights performed"<<std::cout;
             //restore graphics state
         }
         
         //remove the AcroForm from the PDF
         pdf.getRoot().removeKey("/AcroForm");
-        std::cout<<"AcroForm removed"<<std::endl;
-
+        std::cout<<"PDF flattened successfully\nAcroForm removed"<<std::endl;
         //write the changes to the PDF
         QPDFWriter w(pdf, "output.pdf");
         w.write();
