@@ -123,9 +123,17 @@ int main(int argc, char** argv)
                 annot_iter < annotations.end(); ++annot_iter)
             {
                 QPDFObjectHandle annot = *annot_iter;
-                std::stringstream s(annot.getKey("/F").unparse());:
+                if(!isKeyPresent(annot, "/F"))
+                {
+                    //Assuming it is not hidden and invisible and is allowed to print
+                    QPDFObjectHandle number = QPDFObjectHandle::newInteger(4);
+                    annot.getDict().replaceKey("/F", number);
+                }
+
+                std::stringstream s(annot.getKey("/F").unparse());
                 unsigned int flags = 0;
                 s >> flags;
+                
                 //preserve non-widget type annotations
                 if(annot.getKey("/Subtype").unparse() != "/Widget")
                 {
