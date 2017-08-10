@@ -8,6 +8,29 @@
 #include <sstream>
 #include <cstring>
 
+//Check if the given key exists in the dictionary
+bool isKeyPresent(QPDFObjectHandle obj, std::string key)
+{
+    //ensure that obj is dictionary
+    bool isDict = obj.isDictionary();
+    
+    if(isDict)
+    {
+        if(obj.hasKey(key))
+            return true;
+        else
+            return false;
+    }
+    
+    else
+    {
+        if(obj.getDict().hasKey(key))
+            return true;
+        else
+            return false;
+    }
+}
+
 //Function to check if the annotation is allowed to be printed
 bool annotationAllowed(unsigned int flags)
 {
@@ -151,6 +174,8 @@ int main(int argc, char** argv)
             }
 
             page_stream_contents.append("Q\n");
+
+            //check if the existing page contents are wrapped inside q...Q pair
             QPDFObjectHandle content = QPDFObjectHandle::newStream(&pdf, page_stream_contents);
             page.addPageContents(content, false);
             //restore graphics state
