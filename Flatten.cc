@@ -101,10 +101,21 @@ int main(int argc, char** argv)
             //Create new content stream for the page
             std::string page_stream_contents = "q\n";
 
+            //check if page has annotations
+            if(!isKeyPresent(page,"/Annots"))
+                continue;
+            
             //Get all the annotations present in the page
             std::vector<QPDFObjectHandle> annotations = page.getKey("/Annots").getArrayAsVector();
             
-            //get the page resources;
+            //check if the page's /Resources contains /XObject
+            if(!isKeyPresent(page.getKey("/Resources"), "/XObject"))
+            {
+                QPDFObjectHandle empty_dictionary = QPDFObjectHandle::newDictionary();
+                page.getKey("/Resources").getDict().replaceKey("/XObject",empty_dictionary);
+            }
+
+            //get the page resources
             std::map<std::string, QPDFObjectHandle> page_resources_xobject = page.getKey("/Resources").getKey("/XObject").getDictAsMap();
             
             //Work on every annotation present in the page
@@ -112,7 +123,7 @@ int main(int argc, char** argv)
                 annot_iter < annotations.end(); ++annot_iter)
             {
                 QPDFObjectHandle annot = *annot_iter;
-                std::stringstream s(annot.getKey("/F").unparse());
+                std::stringstream s(annot.getKey("/F").unparse());:
                 unsigned int flags = 0;
                 s >> flags;
                 //preserve non-widget type annotations
