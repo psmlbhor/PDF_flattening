@@ -118,6 +118,10 @@ int main(int argc, char** argv)
             //get the page resources
             std::map<std::string, QPDFObjectHandle> page_resources_xobject = page.getKey("/Resources").getKey("/XObject").getDictAsMap();
             
+            //The content stream of the page should already be wrapped inside q...Q pair
+            page.addPageContents(QPDFObjectHandle::newStream(&pdf, "q"), true);
+            page.addPageContents(QPDFObjectHandle::newStream(&pdf, "Q"), false);
+
             //Work on every annotation present in the page
             for(std::vector<QPDFObjectHandle>::iterator annot_iter = annotations.begin(); 
                 annot_iter < annotations.end(); ++annot_iter)
