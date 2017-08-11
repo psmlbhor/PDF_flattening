@@ -107,7 +107,7 @@ int main(int argc, char** argv)
             
             //Get all the annotations present in the page
             std::vector<QPDFObjectHandle> annotations = page.getKey("/Annots").getArrayAsVector();
-            
+           
             //check if the page's /Resources contains /XObject
             if(!isKeyPresent(page.getKey("/Resources"), "/XObject"))
             {
@@ -123,6 +123,9 @@ int main(int argc, char** argv)
             page.addPageContents(QPDFObjectHandle::newStream(&pdf, "Q"), false);
 
             //Work on every annotation present in the page
+            std::vector<int> remove_annot;
+            int annot_num=0;
+
             for(std::vector<QPDFObjectHandle>::iterator annot_iter = annotations.begin(); 
                 annot_iter < annotations.end(); ++annot_iter)
             {
@@ -195,8 +198,9 @@ int main(int argc, char** argv)
                     //
                     
                     //remove this annotation from the /Annots of the page
+                    remove_annot.push_back(annot_num);  
                 }
-
+                annot_num++;
             }
 
             if(!isKeyPresent(page.getKey("/Resources"), "/XObject"))
@@ -218,7 +222,17 @@ int main(int argc, char** argv)
             //check if the existing page contents are wrapped inside q...Q pair
             QPDFObjectHandle content = QPDFObjectHandle::newStream(&pdf, page_stream_contents);
             page.addPageContents(content, false);
-            //restore graphics state
+            
+            //replace the original /Annots array with the new array
+            int pos_adjust = 0;
+            for(size_t i=0; i<remove_annot.size(); ++i)
+            {
+                int num = remove_annot.front();
+                annotations.erase(annotations.begin() + num + pos_adjust);
+                pos_adjust++;
+            }
+
+            page.replaceKey("/Annots", QPDFObjectHandle::newArray(annotations));
         }
         
         //remove the AcroForm from the PDF
