@@ -1,7 +1,8 @@
 In Flatten.cc
 
-1. try-catch not implemented
-2. Annotations which are of /Widget subtype have to be removed form /Annots of the page
+1. Exception handling not implemented
+2. For checkboxes, the appearence has to be asked to /AS for choosing between /Yes or /Off
 3. Tranfomation matrices not take care of
 4. Output/flattened PDF contains the filled values at the bottom of the page
 5. /NeedAppearances true to be dealt with
+6. Check if /ResX<number> already present in the PDF
