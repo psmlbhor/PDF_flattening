@@ -143,7 +143,17 @@ int main(int argc, char** argv)
                 //Honour the flags(/F) present in the annotation
                 else if (annotationAllowed(flags))
                 {
-                    
+                    if(!isKeyPresent(annot,"/AP"))
+                    {
+                        QPDFObjectHandle dictionary = QPDFObjectHandle::newDictionary();
+                        annot.replaceKey("/AP", dictionary);
+                        QPDFObjectHandle normal_dictionary = QPDFObjectHandle::newDictionary();
+                        annot.getKey("/AP").replaceKey("/N", normal_dictionary);
+                        
+                        //not sure what to do if annotation is present
+                        //it effectively means that the annotation cannot be drawn
+                    }
+
                     QPDFObjectHandle normal_appearence = annot.getKey("/AP").getKey("/N");
                     
                     //button might have /On or /Off states
@@ -153,7 +163,7 @@ int main(int argc, char** argv)
                     }
                     
                     //check if /XObject has /Name or not
-                    if(!normal_appearence.getDict().hasKey("/Name"))
+                    if(!isKeyPresent(normal_appearence, "/Name"))
                     {
                         std::ostringstream xobj_count;
                         xobj_count << ++count;
@@ -184,6 +194,13 @@ int main(int argc, char** argv)
                 }
 
             }
+
+            if(!isKeyPresent(page.getKey("/Resources"), "/XObject"))
+            {
+                QPDFObjectHandle xobj_dictionary = QPDFObjectHandle::newDictionary();
+                page.getKey("/Resources").replaceKey("/XObject", xobj_dictionary);
+            }
+
             //replace the orginal resources with the new one
             QPDFObjectHandle new_resources = pdf.makeIndirectObject(QPDFObjectHandle::newDictionary(page_resources_xobject));
             for(std::map<std::string, QPDFObjectHandle>::iterator it = page_resources_xobject.begin();
