@@ -163,10 +163,19 @@ int main(int argc, char** argv)
 
                     QPDFObjectHandle normal_appearance = annot.getKey("/AP").getKey("/N");
                     
-                    //button might have /On or /Off states
+                    //button might have /Yes or /Off states
                     if(annot.getKey("/FT").unparse()=="/Btn")
                     {
-                        normal_appearance = normal_appearance.getKey("/Yes");
+                        std::string appearance_state = annot.getKey("/AS").unparse();
+                        std::cout<<annot.unparse()<<std::endl;
+                        std::cout<<appearance_state<<std::endl;
+
+                        //The state might not be present in /N dictionary in which
+                        //case it should be fetched from /D dictionary
+                        if(!isKeyPresent(normal_appearance, appearance_state))
+                            normal_appearance = annot.getKey("/AP").getKey("/D").getKey(appearance_state);
+                        else
+                            normal_appearance = normal_appearance.getKey(appearance_state);
                     }
                     
                     //check if /XObject has /Name or not
@@ -179,14 +188,14 @@ int main(int argc, char** argv)
 
                         QPDFObjectHandle name = QPDFObjectHandle::parse(xobj_name);
                         normal_appearance.getDict().replaceKey("/Name", name);
-                        page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name+" Do Q\nq");
+                        page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name+" Do Q\nq\n");
                         
                         page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name, normal_appearance));
                     }
                     else
                     {
                         QPDFObjectHandle xobj_name = normal_appearance.getDict().getKey("/Name");
-                        page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name.unparse()+" Do Q\nq");
+                        page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name.unparse()+" Do Q\nq\n");
 
                         page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name.unparse(), normal_appearance));
                     
