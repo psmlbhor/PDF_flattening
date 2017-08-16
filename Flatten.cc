@@ -263,17 +263,12 @@ int main(int argc, char** argv)
                     std::cout<<replace_name<<std::endl;
                     page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(replace_name, normal_appearance));
                     
-                    //Apply transformations
-                    bool translate = neesdTranlation(normal_appearance);
+                    //APPLY TRANSFORMATIONS
                     double transformation_matrix[6] = {1,0,0,1,0,0};
 
-                    if(translate)
-                    {
-                        transformation_matrix[4] = annot.getKey("/Rect").getArrayItem(0).getNumericValue();
-                        transformation_matrix[5] = annot.getKey("/Rect").getArrayItem(1).getNumericValue();
-                        std::cout<<transformation_matrix[4]<<std::endl;
-                        std::cout<<transformation_matrix[5]<<std::endl;
-                    }
+                    //Get the llx and lly values of the annotation rectangle
+                    transformation_matrix[4] = annot.getKey("/Rect").getArrayItem(0).getNumericValue();
+                    transformation_matrix[5] = annot.getKey("/Rect").getArrayItem(1).getNumericValue();
 
                     //apply scaling
                     
