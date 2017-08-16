@@ -31,6 +31,40 @@ bool isKeyPresent(QPDFObjectHandle obj, std::string key)
     }
 }
 
+
+//check if translation is needed for the annotation
+bool neesdTranlation(QPDFObjectHandle normal_appearance)
+{
+    bool translate = false;
+    
+    //if /Resources not present, then translation needed
+    if(!isKeyPresent(normal_appearance, "/Resources"))
+    {
+        return true;
+    }
+    else
+    {
+        QPDFObjectHandle resources = normal_appearance.getKey("/Resources");
+        
+        //if /Resouces does not contain /XObject then needs translation
+        if(!isKeyPresent(resources, "/XObject"))
+        {
+            return true;
+        }
+        else
+        {
+            QPDFObjectHandle xobject = QPDFObjectHandle::newNull();
+            bool isDict = false;
+            if(resources.isDictionary())
+                xobject = resources.getKey("/XObject"), isDict = true;
+            else
+                xobject = resources.getDict().getKey("/XObject");
+            
+            
+        }
+    }
+}
+
 //Function to check if the annotation is allowed to be printed
 bool annotationAllowed(unsigned int flags)
 {
@@ -179,6 +213,7 @@ int main(int argc, char** argv)
                     }
                     
                     //check if /XObject has /Name or not
+                    std::string replace_name = "";
                     if(!isKeyPresent(normal_appearance, "/Name"))
                     {
                         std::ostringstream xobj_count;
@@ -188,20 +223,28 @@ int main(int argc, char** argv)
 
                         QPDFObjectHandle name = QPDFObjectHandle::parse(xobj_name);
                         normal_appearance.getDict().replaceKey("/Name", name);
+                        replace_name = xobj_name;
+
                         page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name+" Do Q\nq\n");
                         
-                        page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name, normal_appearance));
+                        //page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name, normal_appearance));
                     }
                     else
                     {
                         QPDFObjectHandle xobj_name = normal_appearance.getDict().getKey("/Name");
+                        replace_name = xobj_name.unparse();
+                        
                         page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name.unparse()+" Do Q\nq\n");
 
-                        page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name.unparse(), normal_appearance));
+                       // page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name.unparse(), normal_appearance));
+
                     
                     }
-
+                    std::cout<<replace_name<<std::endl;
+                    page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(replace_name, normal_appearance));
+                    
                     //Apply transformations
+                    bool translate = neesdTranlation(normal_appearance);
                     //Insert XObject of /N
                     //Restore the graphics state
                     //
