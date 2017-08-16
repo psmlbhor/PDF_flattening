@@ -44,7 +44,8 @@ bool neesdTranlation(QPDFObjectHandle normal_appearance)
     }
     else
     {
-        QPDFObjectHandle resources = normal_appearance.getKey("/Resources");
+
+        QPDFObjectHandle resources = normal_appearance.getDict().getKey("/Resources");
         
         //if /Resouces does not contain /XObject then needs translation
         if(!isKeyPresent(resources, "/XObject"))
@@ -53,16 +54,35 @@ bool neesdTranlation(QPDFObjectHandle normal_appearance)
         }
         else
         {
-            QPDFObjectHandle xobject = QPDFObjectHandle::newNull();
-            bool isDict = false;
+            std::map<std::string, QPDFObjectHandle> xobject;
+            
             if(resources.isDictionary())
-                xobject = resources.getKey("/XObject"), isDict = true;
+                xobject = resources.getKey("/XObject").getDictAsMap();
             else
-                xobject = resources.getDict().getKey("/XObject");
+                xobject = resources.getDict().getKey("/XObject").getDictAsMap();
             
+            for(std::map<std::string, QPDFObjectHandle>::iterator it = xobject.begin();
+                it != xobject.end(); ++it)
+            {
+                if(!isKeyPresent(it->second, "/BBox"))
+                    continue;
+                
+                double left = it->second.getDict().getKey("/BBox").getArrayItem(0).getNumericValue();
+                double bottom = it->second.getDict().getKey("/BBox").getArrayItem(1).getNumericValue();
+
+                //if /BBox does not start with (0,0) then it automatically takes
+                //care of the translation    
+                if(left==0 && bottom==0)
+                {
+                    translate = true;
+                    break;
+                }
+            } 
             
+            return translate;
         }
     }
+    return true;
 }
 
 //Function to check if the annotation is allowed to be printed
@@ -225,7 +245,7 @@ int main(int argc, char** argv)
                         normal_appearance.getDict().replaceKey("/Name", name);
                         replace_name = xobj_name;
 
-                        page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name+" Do Q\nq\n");
+                        //page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name+" Do Q\nq\n");
                         
                         //page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name, normal_appearance));
                     }
@@ -234,7 +254,7 @@ int main(int argc, char** argv)
                         QPDFObjectHandle xobj_name = normal_appearance.getDict().getKey("/Name");
                         replace_name = xobj_name.unparse();
                         
-                        page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name.unparse()+" Do Q\nq\n");
+                        //page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name.unparse()+" Do Q\nq\n");
 
                        // page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name.unparse(), normal_appearance));
 
@@ -245,6 +265,26 @@ int main(int argc, char** argv)
                     
                     //Apply transformations
                     bool translate = neesdTranlation(normal_appearance);
+                    double transformation_matrix[6] = {1,0,0,1,0,0};
+
+                    if(translate)
+                    {
+                        transformation_matrix[4] = annot.getKey("/Rect").getArrayItem(0).getNumericValue();
+                        transformation_matrix[5] = annot.getKey("/Rect").getArrayItem(1).getNumericValue();
+                        std::cout<<transformation_matrix[4]<<std::endl;
+                        std::cout<<transformation_matrix[5]<<std::endl;
+                    }
+
+                    //apply scaling
+                    
+
+                    page_stream_contents.append("\n1 0 0 1 ");
+                    std::ostringstream conv;
+                    conv << transformation_matrix[4];
+                    page_stream_contents.append(conv.str()+" ");
+                    std::ostringstream c;
+                    c << transformation_matrix[5];
+                    page_stream_contents.append(c.str()+" cm "+replace_name+" Do Q\nq\n");
                     //Insert XObject of /N
                     //Restore the graphics state
                     //
