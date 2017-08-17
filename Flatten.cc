@@ -33,7 +33,7 @@ bool isKeyPresent(QPDFObjectHandle obj, std::string key)
 
 
 //check if translation is needed for the annotation
-bool neesdTranlation(QPDFObjectHandle normal_appearance)
+bool needsTranslation(QPDFObjectHandle normal_appearance)
 {
     bool translate = false;
     
@@ -60,29 +60,67 @@ bool neesdTranlation(QPDFObjectHandle normal_appearance)
                 xobject = resources.getKey("/XObject").getDictAsMap();
             else
                 xobject = resources.getDict().getKey("/XObject").getDictAsMap();
-            
-            for(std::map<std::string, QPDFObjectHandle>::iterator it = xobject.begin();
-                it != xobject.end(); ++it)
-            {
-                if(!isKeyPresent(it->second, "/BBox"))
-                    continue;
-                
-                double left = it->second.getDict().getKey("/BBox").getArrayItem(0).getNumericValue();
-                double bottom = it->second.getDict().getKey("/BBox").getArrayItem(1).getNumericValue();
-
-                //if /BBox does not start with (0,0) then it automatically takes
-                //care of the translation    
-                if(left==0 && bottom==0)
+           
+            if(xobject.size()!=0)
+            { 
+                for(std::map<std::string, QPDFObjectHandle>::iterator it = xobject.begin();
+                    it != xobject.end(); ++it)
                 {
-                    translate = true;
-                    break;
+                    if(!isKeyPresent(it->second, "/BBox"))
+                        continue;
+                
+                    double left = it->second.getDict().getKey("/BBox").getArrayItem(0).getNumericValue();
+                    double bottom = it->second.getDict().getKey("/BBox").getArrayItem(1).getNumericValue();
+
+                    //if /BBox does not start with (0,0) then it automatically takes
+                    //care of the translation    
+                    if(left==0 && bottom==0)
+                    {
+                        translate = true;
+                        break;
+                    }
                 }
+                return translate;
             } 
             
-            return translate;
+            return true;
         }
     }
     return true;
+}
+
+//Check if scaling is required
+bool needsScaling(QPDFObjectHandle normal_appearance)
+{
+    
+    if(!isKeyPresent(normal_appearance, "/Resources"))
+    {
+        return false;
+    }
+    else
+    {
+        QPDFObjectHandle resources = normal_appearance.getDict().getKey("/Resources");
+        if(!isKeyPresent(resources,"/XObject"))
+        {
+            return false;
+        }
+        else
+        {
+            std::map<std::string, QPDFObjectHandle> xobjects;
+            if(resources.isDictionary())
+                xobjects = resources.getKey("/XObject").getDictAsMap();
+            else
+                xobjects = resources.getDict().getKey("/XObject").getDictAsMap();
+            
+            //If there are multiple xobjects present,
+            //then scaling 'might' be required
+            if(xobjects.size()==0)
+                return false;
+            else
+                return true;
+        }
+    }
+    return false;
 }
 
 //Function to check if the annotation is allowed to be printed
@@ -221,8 +259,6 @@ int main(int argc, char** argv)
                     if(annot.getKey("/FT").unparse()=="/Btn")
                     {
                         std::string appearance_state = annot.getKey("/AS").unparse();
-                        std::cout<<annot.unparse()<<std::endl;
-                        std::cout<<appearance_state<<std::endl;
 
                         //The state might not be present in /N dictionary in which
                         //case it should be fetched from /D dictionary
@@ -244,45 +280,71 @@ int main(int argc, char** argv)
                         QPDFObjectHandle name = QPDFObjectHandle::parse(xobj_name);
                         normal_appearance.getDict().replaceKey("/Name", name);
                         replace_name = xobj_name;
-
-                        //page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name+" Do Q\nq\n");
-                        
-                        //page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name, normal_appearance));
                     }
                     else
                     {
                         QPDFObjectHandle xobj_name = normal_appearance.getDict().getKey("/Name");
-                        replace_name = xobj_name.unparse();
-                        
-                        //page_stream_contents.append("\n1 0 0 1 0 0 cm "+xobj_name.unparse()+" Do Q\nq\n");
-
-                       // page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(xobj_name.unparse(), normal_appearance));
-
-                    
+                        replace_name = xobj_name.unparse(); 
                     }
-                    std::cout<<replace_name<<std::endl;
+                    
+                    //Insert the named XObject into /Resources
                     page_resources_xobject.insert(std::pair<std::string, QPDFObjectHandle>(replace_name, normal_appearance));
                     
                     //APPLY TRANSFORMATIONS
+                    //Check if translation is required
+                    bool translate = needsTranslation(normal_appearance);
                     double transformation_matrix[6] = {1,0,0,1,0,0};
 
                     //Get the llx and lly values of the annotation rectangle
-                    transformation_matrix[4] = annot.getKey("/Rect").getArrayItem(0).getNumericValue();
-                    transformation_matrix[5] = annot.getKey("/Rect").getArrayItem(1).getNumericValue();
+                    if(translate)
+                    {
+                        transformation_matrix[4] = annot.getKey("/Rect").getArrayItem(0).getNumericValue();
+                        transformation_matrix[5] = annot.getKey("/Rect").getArrayItem(1).getNumericValue();
+                    }
 
-                    //apply scaling
+                    //Check if scaling is required
+                    bool scaling = needsScaling(normal_appearance);
                     
+                    if(scaling)
+                    {
+                        double BBox[4] = {0,0,0,0};
+                        double rect[4] = {0,0,0,0};
 
-                    page_stream_contents.append("\n1 0 0 1 ");
-                    std::ostringstream conv;
-                    conv << transformation_matrix[4];
-                    page_stream_contents.append(conv.str()+" ");
-                    std::ostringstream c;
-                    c << transformation_matrix[5];
-                    page_stream_contents.append(c.str()+" cm "+replace_name+" Do Q\nq\n");
-                    //Insert XObject of /N
-                    //Restore the graphics state
-                    //
+                        for(int i=0; i<4; ++i)
+                        {
+                            BBox[i] = normal_appearance.getKey("/BBox").getArrayItem(i).getNumericValue();
+                            rect[i] = annot.getKey("/Rect").getArrayItem(i).getNumericValue();
+                        }
+
+                        double BBox_width = BBox[2] - BBox[0];
+                        double BBox_height = BBox[3] - BBox[1];
+
+                        double rect_width = rect[2] - rect[0];
+                        double rect_height = rect[3] - rect[1];
+
+                        //If width of BBox and Rectangle do not match then the
+                        //transformation matrix should scale the BBox to the
+                        //size of the annotation Rectangle
+                        if(BBox_width - rect_width != 0 && BBox_height - rect_height !=0)
+                        {
+                            double scaleX = rect_width / BBox_width;
+                            double scaleY = rect_height / BBox_height;
+
+                            transformation_matrix[0] = scaleX;
+                            transformation_matrix[3] = scaleY;
+                        }
+
+                    }
+
+                    std::ostringstream conv[4];
+                    conv[0] << transformation_matrix[0];
+                    conv[1] << transformation_matrix[3];
+                    conv[2] << transformation_matrix[4];
+                    conv[3] << transformation_matrix[5];
+
+                    page_stream_contents.append("\n" + conv[0].str() + " 0 0 " + conv[1].str() +" " +
+                                                conv[2].str() + " " + conv[3].str() + " cm " +
+                                                replace_name + " Do Q\nq\n");
                     
                     //remove this annotation from the /Annots of the page
                     remove_annot.push_back(annot_num);  
@@ -325,6 +387,7 @@ int main(int argc, char** argv)
         //remove the AcroForm from the PDF
         pdf.getRoot().removeKey("/AcroForm");
         std::cout<<"PDF flattened successfully\nAcroForm removed"<<std::endl;
+
         //write the changes to the PDF
         QPDFWriter w(pdf, "output.pdf");
         w.write();
