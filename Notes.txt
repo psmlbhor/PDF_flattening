@@ -2,7 +2,7 @@ In Flatten.cc
 
 1. Exception handling not implemented
 2. For checkboxes, the appearence has to be asked to /AS for choosing between /Yes or /Off ---- DONE
-3. Tranfomation matrices not take care of
-4. Output/flattened PDF contains the filled values at the bottom of the page
+3. Tranfomation matrices not take care of - DONE
+4. Output/flattened PDF contains the filled values at the bottom of the page - DONE
 5. /NeedAppearances true to be dealt with
 6. Check if /ResX<number> already present in the PDF
