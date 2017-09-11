@@ -178,12 +178,15 @@ int main(int argc, char** argv)
     //then process further
     if(acroformPresent(pdf))
     {
+        std::cerr<<"DBG:\t Working with Acroform"<<std::endl;
 
         //Get all the pages present in the PDF document
         std::vector<QPDFObjectHandle> all_pages = pdf.getAllPages();
         for(std::vector<QPDFObjectHandle>::iterator page_iter = all_pages.begin();
             page_iter < all_pages.end(); ++page_iter)
         {
+            std::cerr<<"DBG:\t Working on a new page"<<std::endl;
+
             QPDFObjectHandle page = *page_iter;
             std::vector<QPDFObjectHandle> preserved_annots;
             
@@ -197,6 +200,7 @@ int main(int argc, char** argv)
             if(!isKeyPresent(page,"/Annots"))
                 continue;
             
+            std::cerr<<"WRG:\t Accessing page Annots"<<std::endl;
             //Get all the annotations present in the page
             std::vector<QPDFObjectHandle> annotations = page.getKey("/Annots").getArrayAsVector();
            
@@ -206,7 +210,7 @@ int main(int argc, char** argv)
                 QPDFObjectHandle empty_dictionary = QPDFObjectHandle::newDictionary();
                 page.getKey("/Resources").getDict().replaceKey("/XObject",empty_dictionary);
             }
-
+            
             //get the page resources
             std::map<std::string, QPDFObjectHandle> page_resources_xobject = page.getKey("/Resources").getKey("/XObject").getDictAsMap();
             
@@ -221,6 +225,8 @@ int main(int argc, char** argv)
             for(std::vector<QPDFObjectHandle>::iterator annot_iter = annotations.begin(); 
                 annot_iter < annotations.end(); ++annot_iter)
             {
+                std::cerr<<"DBG:\t Working on a new Annot"<<std::endl;
+
                 QPDFObjectHandle annot = *annot_iter;
                 if(!isKeyPresent(annot, "/F"))
                 {
@@ -242,6 +248,7 @@ int main(int argc, char** argv)
                 //Honour the flags(/F) present in the annotation
                 else if (annotationAllowed(flags))
                 {
+                    std::cerr<<"DBG:\t Flags honoured"<<std::endl;
                     if(!isKeyPresent(annot,"/AP"))
                     {
                         QPDFObjectHandle dictionary = QPDFObjectHandle::newDictionary();
@@ -253,6 +260,7 @@ int main(int argc, char** argv)
                         //it effectively means that the annotation cannot be drawn
                     }
 
+                    std::cerr<<"WRG:\t Accessing Annot's /AP and /N"<<std::endl;
                     QPDFObjectHandle normal_appearance = annot.getKey("/AP").getKey("/N");
                     
                     
@@ -261,6 +269,7 @@ int main(int argc, char** argv)
                     {
                         std::string appearance_state = annot.getKey("/AS").unparse();
 
+                        std::cerr<<"WRG:\t Changing normal_appearance for /Btn"<<std::endl;
                         //The state might not be present in /N dictionary in which
                         //case it should be fetched from /D dictionary
                         if(!isKeyPresent(normal_appearance, appearance_state))
@@ -274,6 +283,7 @@ int main(int argc, char** argv)
                     std::string replace_name = "";
                     if(!isKeyPresent(normal_appearance, "/Name"))
                     {
+                        std::cerr<<"DBG:\t Standard /XObject name not present"<<std::endl;
                         std::ostringstream xobj_count;
                         xobj_count << ++count;
                         std::string xobj_name = "/ResX";
@@ -285,6 +295,7 @@ int main(int argc, char** argv)
                     }
                     else
                     {
+                        std::cerr<<"DBG:\t Standard /XObject name present"<<std::endl;
                         QPDFObjectHandle xobj_name = normal_appearance.getDict().getKey("/Name");
                         replace_name = xobj_name.unparse(); 
                     }
@@ -300,6 +311,7 @@ int main(int argc, char** argv)
                     //Get the llx and lly values of the annotation rectangle
                     if(translate)
                     {
+                        std::cerr<<"DBG:\t Performing translation"<<std::endl;
                         transformation_matrix[4] = annot.getKey("/Rect").getArrayItem(0).getNumericValue();
                         transformation_matrix[5] = annot.getKey("/Rect").getArrayItem(1).getNumericValue();
                     }
@@ -309,6 +321,7 @@ int main(int argc, char** argv)
                     
                     if(scaling)
                     {
+                        std::cerr<<"DBG:\t Performaing scaling"<<std::endl;
                         double BBox[4] = {0,0,0,0};
                         double rect[4] = {0,0,0,0};
 
@@ -388,7 +401,7 @@ int main(int argc, char** argv)
         
         //remove the AcroForm from the PDF
         pdf.getRoot().removeKey("/AcroForm");
-        std::cout<<"PDF flattened successfully\nAcroForm removed"<<std::endl;
+        std::cerr<<"PDF flattened successfully\nAcroForm removed"<<std::endl;
 
         //write the changes to the PDF
         QPDFWriter w(pdf, "output.pdf");
