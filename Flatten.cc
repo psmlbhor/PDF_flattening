@@ -255,6 +255,7 @@ int main(int argc, char** argv)
 
                     QPDFObjectHandle normal_appearance = annot.getKey("/AP").getKey("/N");
                     
+                    
                     //button might have /Yes or /Off states
                     if(annot.getKey("/FT").unparse()=="/Btn")
                     {
@@ -268,6 +269,7 @@ int main(int argc, char** argv)
                             normal_appearance = normal_appearance.getKey(appearance_state);
                     }
                     
+                        
                     //check if /XObject has /Name or not
                     std::string replace_name = "";
                     if(!isKeyPresent(normal_appearance, "/Name"))
