@@ -164,21 +164,9 @@ void usage()
     exit(2);
 }
 
-int main(int argc, char** argv)
+void NoNeedAppearances(QPDF &pdf)
 {
-    QPDF pdf;
-    if(argc<2)
-    {
-        usage();
-    }
-
-    pdf.processFile(argv[1]);
-    
-    //Check if /AcroForm is present, and if it is present
-    //then process further
-    if(acroformPresent(pdf))
-    {
-        std::cerr<<"DBG:\t Working with Acroform"<<std::endl;
+    std::cerr<<"DBG:\t Working with Acroform"<<std::endl;
 
         //Get all the pages present in the PDF document
         std::vector<QPDFObjectHandle> all_pages = pdf.getAllPages();
@@ -408,6 +396,87 @@ int main(int argc, char** argv)
         w.write();
 
         //add preserved annotations to the page
+
+}
+
+void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object)
+{
+    //check for the inheritable attributes
+    
+    //Check if the field is field dictionary
+    if(object.hasKey("/Kids"))
+    {
+        //recursively descend into children as well
+        std::vector<QPDFObjectHandle> children = object.getKey("/Kids").getArrayAsVector();
+        for(std::vector<QPDFObjectHandle>::iterator child_iterator = children.begin();
+            child_iterator < children.end(); ++child_iterator)
+        {
+            
+        }
+    }
+    //If not kids but only parent is present, then the object has to be
+    //both, a field dictionary as well as annotation dictionary
+    else if(object.hasKey("/Parent"))
+    {
+        
+    }
+}
+
+void needAppearances(QPDF &pdf)
+{
+
+    //Get all the pages present in the PDF document
+    std::vector<QPDFObjectHandle> all_pages = pdf.getAllPages();
+    for(std::vector<QPDFObjectHandle>::iterator page_iter = all_pages.begin();
+        page_iter < all_pages.end(); ++page_iter)
+    {
+        std::cerr<<"DBG:\t Working on a new page"<<std::endl;
+        QPDFObjectHandle page = *page_iter;
+
+        if(!isKeyPresent(page,"/Annots"))
+            continue;
+
+        //Get all the annotations present in the page
+        std::vector<QPDFObjectHandle> annotations = page.getKey("/Annots").getArrayAsVector();
+
+        //Iterate over every annotation present on the page       
+        for(std::vector<QPDFObjectHandle>::iterator annot_iter = annotations.begin(); 
+            annot_iter < annotations.end(); ++annot_iter)
+        {
+            std::cerr<<"DBG:\t Working on a new Annot"<<std::endl;
+            QPDFObjectHandle annot = *annot_iter;
+            
+            getInheritableValues(annot, annot);
+
+        }
+    }
+}
+
+int main(int argc, char** argv)
+{
+    QPDF pdf;
+    if(argc<2)
+    {
+        usage();
+    }
+
+    pdf.processFile(argv[1]);
+    
+    //Check if /AcroForm is present, and if it is present
+    //then process further
+    if(acroformPresent(pdf))
+    {
+        QPDFObjectHandle root = pdf.getRoot();
+        if(!root.getKey("/AcroForm").hasKey("/NeedAppearances") ||
+           root.getKey("/AcroForm").getKey("/NeedAppearances").unparse() != "true")
+        {
+            NoNeedAppearances(pdf);
+        }
+        else
+        {
+            std::cerr<<"This bitch needs generation"<<std::endl;
+            NoNeedAppearances(pdf);
+        }
     }    
     return 0;   
 }
