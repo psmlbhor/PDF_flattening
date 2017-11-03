@@ -398,11 +398,40 @@ void NoNeedAppearances(QPDF &pdf)
         //add preserved annotations to the page
 
 }
+static int count = 0;
+void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation, std::map<std::string, std::string> inherited)
+{
+    for(std::map<std::string, std::string>::iterator it = inherited.begin(); it != inherited.end(); ++it)
+    {
+        std::string first = it->first;
+        std::string second = it->second;
+        std::cout<<"first: "<<first<<" Second: "<<second<<std::endl;
+    }
+}
 
-void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object)
+void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object, std::map<std::string, std::string> inherited_values)
 {
     //check for the inheritable attributes
-    
+    std::map<std::string, std::string> inherited;
+    inherited = inherited_values;
+
+    if(object.hasKey("/FT"))
+    {
+        inherited.insert(std::pair<std::string, std::string>("/FT", object.getKey("/FT").unparse()));
+    }
+    if(object.hasKey("/Ff"))
+    {
+        inherited.insert(std::pair<std::string, std::string>("/Ff", object.getKey("/Ff").unparse()));
+    }
+    if(object.hasKey("/V"))
+    {
+        inherited.insert(std::pair<std::string, std::string>("/V", object.getKey("/V").unparse()));
+    }
+    if(object.hasKey("/DV"))
+    {
+        inherited.insert(std::pair<std::string, std::string>("/DV", object.getKey("/DV").unparse()));
+    }
+
     //Check if the field is field dictionary
     if(object.hasKey("/Kids"))
     {
@@ -411,14 +440,21 @@ void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object)
         for(std::vector<QPDFObjectHandle>::iterator child_iterator = children.begin();
             child_iterator < children.end(); ++child_iterator)
         {
-            
+            QPDFObjectHandle child = *child_iterator;
+            getInheritableValues(object, child, inherited);
         }
     }
     //If not kids but only parent is present, then the object has to be
     //both, a field dictionary as well as annotation dictionary
     else if(object.hasKey("/Parent"))
     {
-        
+        generateOneAppearance(object, object, inherited);
+    }
+    //If both are not present, then that means it is a top level annotation with
+    //Field and annotation dictionaries merged together
+    else
+    {
+        generateOneAppearance(parent, object, inherited);
     }
 }
 
@@ -445,11 +481,12 @@ void needAppearances(QPDF &pdf)
         {
             std::cerr<<"DBG:\t Working on a new Annot"<<std::endl;
             QPDFObjectHandle annot = *annot_iter;
-            
-            getInheritableValues(annot, annot);
-
+            std::map<std::string, std::string> inherited_values;
+            getInheritableValues(annot, annot, inherited_values);
+            count++;
         }
     }
+    std::cout<<"Count: "<<count<<std::endl;
 }
 
 int main(int argc, char** argv)
@@ -475,7 +512,7 @@ int main(int argc, char** argv)
         else
         {
             std::cerr<<"This bitch needs generation"<<std::endl;
-            NoNeedAppearances(pdf);
+            needAppearances(pdf);
         }
     }    
     return 0;   
