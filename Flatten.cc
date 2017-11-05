@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <cstring>
+#include <exception>
 
 //Check if the given key exists in the dictionary
 bool isKeyPresent(QPDFObjectHandle obj, std::string key)
@@ -188,7 +189,7 @@ void NoNeedAppearances(QPDF &pdf)
             if(!isKeyPresent(page,"/Annots"))
                 continue;
             
-            std::cerr<<"WRG:\t Accessing page Annots"<<std::endl;
+            std::cerr<<"DBG:\t Accessing page Annots"<<std::endl;
             //Get all the annotations present in the page
             std::vector<QPDFObjectHandle> annotations = page.getKey("/Annots").getArrayAsVector();
            
@@ -239,25 +240,22 @@ void NoNeedAppearances(QPDF &pdf)
                     std::cerr<<"DBG:\t Flags honoured"<<std::endl;
                     if(!isKeyPresent(annot,"/AP"))
                     {
-                        QPDFObjectHandle dictionary = QPDFObjectHandle::newDictionary();
-                        annot.replaceKey("/AP", dictionary);
-                        QPDFObjectHandle normal_dictionary = QPDFObjectHandle::newDictionary();
-                        annot.getKey("/AP").replaceKey("/N", normal_dictionary);
-                        
-                        //not sure what to do if annotation is present
-                        //it effectively means that the annotation cannot be drawn
+                        QPDFObjectHandle normal_dictionary = QPDFObjectHandle::newStream(&pdf);
+                        std::map<std::string, QPDFObjectHandle> N;
+                        N.insert(std::pair<std::string, QPDFObjectHandle>("/N", normal_dictionary));
+                        annot.replaceKey("/AP", QPDFObjectHandle::newDictionary(N));
                     }
 
-                    std::cerr<<"WRG:\t Accessing Annot's /AP and /N"<<std::endl;
+                    std::cerr<<"DBG:\t Accessing Annot's /AP and /N"<<std::endl;
                     QPDFObjectHandle normal_appearance = annot.getKey("/AP").getKey("/N");
-                    
+
                     
                     //button might have /Yes or /Off states
                     if(annot.getKey("/FT").unparse()=="/Btn")
                     {
                         std::string appearance_state = annot.getKey("/AS").unparse();
 
-                        std::cerr<<"WRG:\t Changing normal_appearance for /Btn"<<std::endl;
+                        std::cerr<<"DBG:\t Changing normal_appearance for /Btn"<<std::endl;
                         //The state might not be present in /N dictionary in which
                         //case it should be fetched from /D dictionary
                         if(!isKeyPresent(normal_appearance, appearance_state))
@@ -265,8 +263,12 @@ void NoNeedAppearances(QPDF &pdf)
                         else
                             normal_appearance = normal_appearance.getKey(appearance_state);
                     }
+
+
+                    bool isNAdict = false;
+                    if(normal_appearance.isDictionary())
+                        isNAdict = true;
                     
-                        
                     //check if /XObject has /Name or not
                     std::string replace_name = "";
                     if(!isKeyPresent(normal_appearance, "/Name"))
@@ -277,14 +279,22 @@ void NoNeedAppearances(QPDF &pdf)
                         std::string xobj_name = "/ResX";
                         xobj_name.append(xobj_count.str());
 
-                        QPDFObjectHandle name = QPDFObjectHandle::parse(xobj_name);
-                        normal_appearance.getDict().replaceKey("/Name", name);
+                        QPDFObjectHandle name = QPDFObjectHandle::newName(xobj_name);
+                        if(!isNAdict) //it is a stream
+                            normal_appearance.getDict().replaceKey("/Name", name);
+                        else //it is a dictionary
+                            normal_appearance.replaceKey("/Name", name);
+
                         replace_name = xobj_name;
                     }
                     else
                     {
                         std::cerr<<"DBG:\t Standard /XObject name present"<<std::endl;
-                        QPDFObjectHandle xobj_name = normal_appearance.getDict().getKey("/Name");
+                        QPDFObjectHandle xobj_name;
+                        if(!isNAdict) //it is a stream
+                            xobj_name = normal_appearance.getDict().getKey("/Name");
+                        else //it is a dictionary
+                            xobj_name = normal_appearance.getKey("/Name");
                         replace_name = xobj_name.unparse(); 
                     }
                     
@@ -315,7 +325,10 @@ void NoNeedAppearances(QPDF &pdf)
 
                         for(int i=0; i<4; ++i)
                         {
-                            BBox[i] = normal_appearance.getKey("/BBox").getArrayItem(i).getNumericValue();
+                            if(isNAdict)
+                                BBox[i] = normal_appearance.getKey("/BBox").getArrayItem(i).getNumericValue();
+                            else
+                                BBox[i] = normal_appearance.getDict().getKey("/BBox").getArrayItem(i).getNumericValue();
                             rect[i] = annot.getKey("/Rect").getArrayItem(i).getNumericValue();
                         }
 
@@ -392,24 +405,114 @@ void NoNeedAppearances(QPDF &pdf)
         std::cerr<<"PDF flattened successfully\nAcroForm removed"<<std::endl;
 
         //write the changes to the PDF
-        QPDFWriter w(pdf, "output.pdf");
-        w.write();
-
-        //add preserved annotations to the page
+        //QPDFWriter w(pdf, "output.pdf");
+        //w.write();
 
 }
 static int count = 0;
-void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation, std::map<std::string, std::string> inherited)
+void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation, std::map<std::string, std::string> inherited, QPDF &pdf)
 {
-    for(std::map<std::string, std::string>::iterator it = inherited.begin(); it != inherited.end(); ++it)
+    if(!annotation.hasKey("/AP"))
     {
-        std::string first = it->first;
-        std::string second = it->second;
-        std::cout<<"first: "<<first<<" Second: "<<second<<std::endl;
-    }
-}
+        //Get the /Rect entry from the annotation
+        double rect[4] = {0, 0, 0, 0};
+        for(int i = 0; i < 4; i++)
+        {
+            rect[i] = annotation.getKey("/Rect").getArrayItem(i).getNumericValue();
+        }
 
-void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object, std::map<std::string, std::string> inherited_values)
+        //Get the Default Resources from the AcroForm
+        QPDFObjectHandle defaultResources = QPDFObjectHandle::newDictionary();
+        if(pdf.getRoot().getKey("/AcroForm").hasKey("/DR"))
+        {
+            defaultResources = pdf.getRoot().getKey("/AcroForm").getKey("/DR");
+        }
+        
+        
+        //If there exists a Normal Apperance stream already, then we have to replace
+        //the existing /Resources with the new one, but care has to be taken that if
+        //the existing resources contains conflicting names, then the existing names
+        //are to be given preference
+        //QPDFObjectHandle defaultResources = QPDFObjectHandle::newDictionary();
+        //for(std::map<std::string, QPDFObjectHandle>::it = DRmap.begin();
+        //        it != DRmap.end(); it++)
+        //{
+            
+        //}
+        //
+
+        QPDFObjectHandle BBoxArray = QPDFObjectHandle::newArray();
+        BBoxArray.appendItem( QPDFObjectHandle::newReal(0) );
+        BBoxArray.appendItem( QPDFObjectHandle::newReal(0) );
+        BBoxArray.appendItem( QPDFObjectHandle::newReal(rect[2]) );
+        BBoxArray.appendItem( QPDFObjectHandle::newReal(rect[3]) );
+
+        std::ostringstream s[2];
+        s[0] << defaultResources.getObjectID();
+        s[1] << defaultResources.getGeneration();
+        QPDFObjectHandle normalDictionary = QPDFObjectHandle::newDictionary();
+        QPDFObjectHandle type = QPDFObjectHandle::newName("/XObject");
+        QPDFObjectHandle subtype = QPDFObjectHandle::newName("/Form");
+        normalDictionary.replaceKey("/Type", type);
+        normalDictionary.replaceKey("/Subtype", subtype);
+        normalDictionary.replaceKey("/Resources", defaultResources);
+        normalDictionary.replaceKey("/BBox", BBoxArray);
+
+        std::string streamContent = "/Tx BMC q BT " + inherited.find("/DA")->second + " 1 0 0 1 0 0 Tm\n"
+                                    "(" + inherited.find("/V")->second + ") Tj ET Q EMC\n";
+
+
+        QPDFObjectHandle normalAppearance = QPDFObjectHandle::newStream(&pdf, streamContent);
+        normalAppearance.replaceDict(normalDictionary);
+    
+        //Add the /AP << /N object >> entry to the annotation
+        std::map<std::string, QPDFObjectHandle> N;
+        N.insert(std::pair<std::string, QPDFObjectHandle>("/N", normalAppearance));
+        annotation.replaceKey("/AP", QPDFObjectHandle::newDictionary(N));
+
+        //QPDFWriter w(pdf, "trueoutput.pdf");
+        //w.write();
+    }
+    else
+    {
+        QPDFObjectHandle currentNormalAppearance = annotation.getKey("/AP").getKey("/N");
+        QPDFObjectHandle appearanceObject;
+        
+        if(currentNormalAppearance.isDictionary())
+        {
+            appearanceObject = currentNormalAppearance.getKey(annotation.getKey("/AS").unparse());
+        }
+        else
+        {
+            appearanceObject = currentNormalAppearance;
+        }
+
+        
+        //Get the Default Resources from the AcroForm
+        QPDFObjectHandle defaultResources = QPDFObjectHandle::newDictionary();
+        if(pdf.getRoot().getKey("/AcroForm").hasKey("/DR"))
+        {
+            defaultResources = pdf.getRoot().getKey("/AcroForm").getKey("/DR");
+        }
+        appearanceObject.getDict().replaceKey("/Resources", defaultResources);
+        std::string streamContent = "\n/Tx BMC" 
+                                    "\nq" 
+                                    "\nBT" 
+                                    "\n" + inherited.find("/DA")->second + 
+                                    "\n" + "1 0 0 1 0 0 Tm" 
+                                    "\n(" + inherited.find("/V")->second + ") Tj" 
+                                    "\nET" 
+                                    "\nQ" 
+                                    "\nEMC\n";
+        
+        appearanceObject.replaceStreamData(streamContent, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+
+        //QPDFWriter w(pdf, "trueoutput.pdf");
+        //w.write();
+    }
+}   
+
+void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object, std::map<std::string, std::string> inherited_values, QPDF &pdf)
 {
     //check for the inheritable attributes
     std::map<std::string, std::string> inherited;
@@ -431,6 +534,14 @@ void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object, st
     {
         inherited.insert(std::pair<std::string, std::string>("/DV", object.getKey("/DV").unparse()));
     }
+    if(object.hasKey("/DA"))
+    {
+        inherited.insert(std::pair<std::string, std::string>("/DA", object.getKey("/DA").unparse()));
+    }
+    if(object.hasKey("/Q"))
+    {
+        inherited.insert(std::pair<std::string, std::string>("/Q", object.getKey("/Q").unparse()));
+    }
 
     //Check if the field is field dictionary
     if(object.hasKey("/Kids"))
@@ -441,20 +552,22 @@ void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object, st
             child_iterator < children.end(); ++child_iterator)
         {
             QPDFObjectHandle child = *child_iterator;
-            getInheritableValues(object, child, inherited);
+            getInheritableValues(object, child, inherited, pdf);
         }
     }
     //If not kids but only parent is present, then the object has to be
     //both, a field dictionary as well as annotation dictionary
     else if(object.hasKey("/Parent"))
     {
-        generateOneAppearance(object, object, inherited);
+        if(object.getKey("/FT").unparse() == "/Tx")
+            generateOneAppearance(object, object, inherited, pdf);
     }
     //If both are not present, then that means it is a top level annotation with
     //Field and annotation dictionaries merged together
     else
     {
-        generateOneAppearance(parent, object, inherited);
+        if(object.getKey("/FT").unparse() == "/Tx")
+            generateOneAppearance(parent, object, inherited, pdf);
     }
 }
 
@@ -482,11 +595,10 @@ void needAppearances(QPDF &pdf)
             std::cerr<<"DBG:\t Working on a new Annot"<<std::endl;
             QPDFObjectHandle annot = *annot_iter;
             std::map<std::string, std::string> inherited_values;
-            getInheritableValues(annot, annot, inherited_values);
+            getInheritableValues(annot, annot, inherited_values, pdf);
             count++;
         }
     }
-    std::cout<<"Count: "<<count<<std::endl;
 }
 
 int main(int argc, char** argv)
@@ -511,9 +623,13 @@ int main(int argc, char** argv)
         }
         else
         {
-            std::cerr<<"This bitch needs generation"<<std::endl;
+            std::cerr<<"This PDF form needs generation of appearances"<<std::endl;
             needAppearances(pdf);
+            root.getKey("/AcroForm").removeKey("/NeedAppearances");
+            NoNeedAppearances(pdf);    
         }
+        QPDFWriter w(pdf, "output.pdf");
+        w.write();
     }    
     return 0;   
 }
