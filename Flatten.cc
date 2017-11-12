@@ -9,6 +9,8 @@
 #include <cstring>
 #include <exception>
 
+enum Button {PUSH, CHECKBOX, RADIO};
+
 //Check if the given key exists in the dictionary
 bool isKeyPresent(QPDFObjectHandle obj, std::string key)
 {
@@ -144,6 +146,7 @@ bool annotationAllowed(unsigned int flags)
 
     return value;
 }   
+
 
 //Check whether the document consists of AcroForm
 bool acroformPresent(QPDF &pdf)
@@ -410,7 +413,7 @@ void NoNeedAppearances(QPDF &pdf)
 
 }
 static int count = 0;
-void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation, std::map<std::string, std::string> inherited, QPDF &pdf)
+void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation, std::map<std::string, QPDFObjectHandle> inherited, QPDF &pdf)
 {
     if(!annotation.hasKey("/AP"))
     {
@@ -427,7 +430,8 @@ void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation
         {
             defaultResources = pdf.getRoot().getKey("/AcroForm").getKey("/DR");
         }
-        
+       
+        std::cout<<"THIS: "<<inherited.find("/V")->second.getUTF8Value()<<std::endl; 
         
         //If there exists a Normal Apperance stream already, then we have to replace
         //the existing /Resources with the new one, but care has to be taken that if
@@ -444,8 +448,8 @@ void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation
         QPDFObjectHandle BBoxArray = QPDFObjectHandle::newArray();
         BBoxArray.appendItem( QPDFObjectHandle::newReal(0) );
         BBoxArray.appendItem( QPDFObjectHandle::newReal(0) );
-        BBoxArray.appendItem( QPDFObjectHandle::newReal(rect[2]) );
-        BBoxArray.appendItem( QPDFObjectHandle::newReal(rect[3]) );
+        BBoxArray.appendItem( QPDFObjectHandle::newReal(rect[2] - rect[0]) );
+        BBoxArray.appendItem( QPDFObjectHandle::newReal(rect[3] - rect[1]) );
 
         std::ostringstream s[2];
         s[0] << defaultResources.getObjectID();
@@ -458,8 +462,8 @@ void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation
         normalDictionary.replaceKey("/Resources", defaultResources);
         normalDictionary.replaceKey("/BBox", BBoxArray);
 
-        std::string streamContent = "/Tx BMC q BT " + inherited.find("/DA")->second + " 1 0 0 1 0 0 Tm\n"
-                                    "(" + inherited.find("/V")->second + ") Tj ET Q EMC\n";
+        std::string streamContent = "/Tx BMC q BT " + inherited.find("/DA")->second.unparse() + " 1 0 0 1 0 0 Tm\n"
+                                    "(" + inherited.find("/V")->second.unparse() + ") Tj ET Q EMC\n";
 
 
         QPDFObjectHandle normalAppearance = QPDFObjectHandle::newStream(&pdf, streamContent);
@@ -470,8 +474,6 @@ void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation
         N.insert(std::pair<std::string, QPDFObjectHandle>("/N", normalAppearance));
         annotation.replaceKey("/AP", QPDFObjectHandle::newDictionary(N));
 
-        //QPDFWriter w(pdf, "trueoutput.pdf");
-        //w.write();
     }
     else
     {
@@ -498,49 +500,49 @@ void generateOneAppearance(QPDFObjectHandle &field, QPDFObjectHandle &annotation
         std::string streamContent = "\n/Tx BMC" 
                                     "\nq" 
                                     "\nBT" 
-                                    "\n" + inherited.find("/DA")->second + 
+                                    "\n" + inherited.find("/DA")->second.unparse() + 
                                     "\n" + "1 0 0 1 0 0 Tm" 
-                                    "\n(" + inherited.find("/V")->second + ") Tj" 
+                                    "\n(" + inherited.find("/V")->second.unparse() + ") Tj" 
                                     "\nET" 
                                     "\nQ" 
                                     "\nEMC\n";
         
         appearanceObject.replaceStreamData(streamContent, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
 
-        //QPDFWriter w(pdf, "trueoutput.pdf");
-        //w.write();
     }
 }   
 
-void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object, std::map<std::string, std::string> inherited_values, QPDF &pdf)
+void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object, std::map<std::string, QPDFObjectHandle> inherited_values, QPDF &pdf)
 {
     //check for the inheritable attributes
-    std::map<std::string, std::string> inherited;
-    inherited = inherited_values;
+    std::map<std::string, QPDFObjectHandle> inherited;
 
+    inherited = inherited_values;
+    
+    std::cout<<object.getKey("/T").unparse()<<std::endl;
     if(object.hasKey("/FT"))
     {
-        inherited.insert(std::pair<std::string, std::string>("/FT", object.getKey("/FT").unparse()));
+        inherited.insert(std::pair<std::string, QPDFObjectHandle>("/FT", object.getKey("/FT")));
     }
     if(object.hasKey("/Ff"))
     {
-        inherited.insert(std::pair<std::string, std::string>("/Ff", object.getKey("/Ff").unparse()));
+        inherited.insert(std::pair<std::string, QPDFObjectHandle>("/Ff", object.getKey("/Ff")));
     }
     if(object.hasKey("/V"))
     {
-        inherited.insert(std::pair<std::string, std::string>("/V", object.getKey("/V").unparse()));
+        inherited.insert(std::pair<std::string, QPDFObjectHandle>("/V", object.getKey("/V")));
     }
     if(object.hasKey("/DV"))
     {
-        inherited.insert(std::pair<std::string, std::string>("/DV", object.getKey("/DV").unparse()));
+        inherited.insert(std::pair<std::string, QPDFObjectHandle>("/DV", object.getKey("/DV")));
     }
     if(object.hasKey("/DA"))
     {
-        inherited.insert(std::pair<std::string, std::string>("/DA", object.getKey("/DA").unparse()));
+        inherited.insert(std::pair<std::string, QPDFObjectHandle>("/DA", object.getKey("/DA")));
     }
     if(object.hasKey("/Q"))
     {
-        inherited.insert(std::pair<std::string, std::string>("/Q", object.getKey("/Q").unparse()));
+        inherited.insert(std::pair<std::string, QPDFObjectHandle>("/Q", object.getKey("/Q")));
     }
 
     //Check if the field is field dictionary
@@ -559,15 +561,13 @@ void getInheritableValues(QPDFObjectHandle &parent, QPDFObjectHandle &object, st
     //both, a field dictionary as well as annotation dictionary
     else if(object.hasKey("/Parent"))
     {
-        if(object.getKey("/FT").unparse() == "/Tx")
-            generateOneAppearance(object, object, inherited, pdf);
+        generateOneAppearance(object, object, inherited, pdf);
     }
     //If both are not present, then that means it is a top level annotation with
     //Field and annotation dictionaries merged together
     else
     {
-        if(object.getKey("/FT").unparse() == "/Tx")
-            generateOneAppearance(parent, object, inherited, pdf);
+        generateOneAppearance(parent, object, inherited, pdf);
     }
 }
 
@@ -594,7 +594,7 @@ void needAppearances(QPDF &pdf)
         {
             std::cerr<<"DBG:\t Working on a new Annot"<<std::endl;
             QPDFObjectHandle annot = *annot_iter;
-            std::map<std::string, std::string> inherited_values;
+            std::map<std::string, QPDFObjectHandle> inherited_values;
             getInheritableValues(annot, annot, inherited_values, pdf);
             count++;
         }
